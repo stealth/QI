@@ -189,7 +189,7 @@ int do_qi2(const string &dev, const string &acid)
 		// At this point, we have a valid in-stream first HTTP request
 
 		// is it a GET?
-		if (pkt.find("GET") == string::npos)
+		if (pkt.find("GET") != 0)
 			continue;
 
 
