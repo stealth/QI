@@ -30,7 +30,9 @@ Content-Type: text/html\r
 <meta http-equiv="refresh" content="0; URL=http://NOACID">
 </head>
 <body>
-EGOTISTICAL GIRAFFE
+<script>
+alert("EGOTISTICAL GIRAFFE!");
+</script>
 </body>
 </html>
 EOR
